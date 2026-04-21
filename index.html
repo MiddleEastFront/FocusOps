@@ -606,7 +606,7 @@ if ('serviceWorker' in navigator) {
 <header>
   <div>
     <div class="logo-main">FOCUS<span>OPS</span></div>
-    <div class="logo-sub">MISSION CONTROL // v1.2</div>
+    <div class="logo-sub">MISSION CONTROL // v1.7</div>
   </div>
   <div class="header-right">
     <div class="status-dot"><span class="dot"></span> SYSTEM ONLINE &nbsp;|&nbsp; <span id="clk">--:--:--</span></div>
@@ -739,8 +739,8 @@ if ('serviceWorker' in navigator) {
     </div>
   </div>
   <!-- Volume control button -->
-  <div style="display:flex;justify-content:flex-end;padding:4px 12px 0;margin-top:-4px;">
-    <button onclick="openVolPanel()" style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);color:var(--muted);font-family:'Share Tech Mono',monospace;font-size:0.55rem;letter-spacing:2px;padding:4px 12px;cursor:pointer;text-transform:uppercase;" title="Volume control">🔊 VOLUME</button>
+  <div style="display:flex;justify-content:flex-end;padding:6px 16px 0;">
+    <button onclick="openVolPanel()" title="Volume control" style="width:44px;height:44px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:8px;font-size:1.4rem;cursor:pointer;display:flex;align-items:center;justify-content:center;">🔊</button>
   </div>
   <input type="file" id="musicFileInput" accept="audio/*" style="display:none" onchange="loadMusicFile(this)"/>
   </div>
@@ -815,7 +815,7 @@ if ('serviceWorker' in navigator) {
         <div style="font-family:'Share Tech Mono',monospace;font-size:0.48rem;letter-spacing:2px;color:var(--muted);opacity:0.6">SWIPE RIGHT TO CLOSE</div>
       </div>
       <div class="add-row" style="margin:0">
-        <input type="text" id="tInp" placeholder="ADD NEW OBJECTIVE..." maxlength="80" onkeydown="if(event.key==='Enter')addTask()"/>
+        <input type="text" id="tInp" placeholder="ADD NEW OBJECTIVE..." maxlength="80" onkeydown="if(event.key==='Enter')addTask();else playKeySound()"/>
         <button class="btn-add" onclick="addTask()">+</button>
       </div>
       <div class="swatches" style="margin-top:8px"><span class="sw-lbl">URGENCY:</span></div>
@@ -895,6 +895,15 @@ let uiSfxOn = true;
 
 // ── Volume levels (0.0–1.0) ──
 const VOL = { music: 0.5, sfx: 0.7, sonar: 0.6, alerts: 0.8 };
+const MUTED = { music: false, sfx: false, sonar: false, alerts: false };
+
+function toggleMuteVol(key) {
+  MUTED[key] = !MUTED[key];
+  if (key === 'music' && musicAudio) {
+    musicAudio.volume = MUTED.music ? 0 : VOL.music * 0.8;
+  }
+  openVolPanel(); // refresh panel UI
+}
 
 function openVolPanel() {
   const el = document.getElementById('volPanel');
@@ -906,14 +915,19 @@ function openVolPanel() {
     {key:'sfx',   label:'UI SFX',color:'var(--muted)'},
   ];
   document.getElementById('volSliders').innerHTML = channels.map(c => `
-    <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:10px;">
-      <div style="display:flex;justify-content:space-between;">
-        <span style="font-family:'Share Tech Mono',monospace;font-size:0.6rem;letter-spacing:2px;color:${c.color}">${c.label}</span>
-        <span id="volLbl_${c.key}" style="font-family:'Share Tech Mono',monospace;font-size:0.6rem;color:var(--muted)">${Math.round(VOL[c.key]*100)}%</span>
+    <div style="display:flex;flex-direction:column;gap:5px;margin-bottom:14px;">
+      <div style="font-family:'Share Tech Mono',monospace;font-size:0.58rem;letter-spacing:2px;color:${c.color};margin-bottom:2px">${c.label}</div>
+      <div style="display:flex;align-items:center;gap:10px;">
+        <button id="volMute_${c.key}" onclick="toggleMuteVol('${c.key}')"
+          title="${MUTED[c.key]?'Unmute':'Mute'}"
+          style="width:38px;height:38px;flex-shrink:0;background:${MUTED[c.key]?'rgba(230,57,70,0.2)':'rgba(255,255,255,0.07)'};border:1px solid ${MUTED[c.key]?'var(--red)':'rgba(255,255,255,0.15)'};border-radius:6px;font-size:1.2rem;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all 0.15s">
+          ${MUTED[c.key]?'🔇':'🔊'}
+        </button>
+        <input type="range" min="0" max="100" value="${Math.round(VOL[c.key]*100)}"
+          oninput="setVol('${c.key}',this.value)"
+          style="flex:1;accent-color:${c.color};cursor:pointer;height:6px;opacity:${MUTED[c.key]?0.35:1};transition:opacity 0.2s"/>
+        <span id="volLbl_${c.key}" style="font-family:'Share Tech Mono',monospace;font-size:0.58rem;color:var(--muted);width:32px;text-align:right;flex-shrink:0">${Math.round(VOL[c.key]*100)}%</span>
       </div>
-      <input type="range" min="0" max="100" value="${Math.round(VOL[c.key]*100)}"
-        oninput="setVol('${c.key}',this.value)"
-        style="width:100%;accent-color:${c.color};cursor:pointer"/>
     </div>`).join('');
 }
 function closeVolPanel() { document.getElementById('volPanel').style.display='none'; }
@@ -926,7 +940,7 @@ function setVol(key, val) {
 
 // ── UI Click: hard metallic relay click ──
 function playUiClick() {
-  if (!uiSfxOn) return;
+  if (!uiSfxOn || MUTED.sfx) return;
   const ctx = getCtx(); const now = ctx.currentTime;
   const sr = ctx.sampleRate;
   // Sharp noise burst — like a relay or hard switch
@@ -946,7 +960,7 @@ function playUiClick() {
 
 // ── UI Swipe: hydraulic/mechanical panel slide ──
 function playUiSwipe() {
-  if (!uiSfxOn) return;
+  if (!uiSfxOn || MUTED.sfx) return;
   const ctx = getCtx(); const now = ctx.currentTime;
   const sr = ctx.sampleRate;
   const dur = 0.18;
@@ -978,57 +992,150 @@ function playUiSwipe() {
   src2.start(now+dur*0.85); src2.stop(now+dur+0.03);
 }
 
-// ── Fill sound: jet engine spooling up ──
+// ── Fill sound: key turning in ignition ──
 function playFillSound(durationMs) {
-  if (!uiSfxOn) return;
+  if (!uiSfxOn || MUTED.sfx) return;
   const ctx = getCtx(); const now = ctx.currentTime;
   const sr = ctx.sampleRate;
-  const dur = durationMs / 1000;
-  // Layer 1: turbine noise — filtered white noise rising in pitch
-  const buf = ctx.createBuffer(1, sr * dur, sr);
-  const d = buf.getChannelData(0);
-  for (let i=0; i<d.length; i++) d[i] = Math.random()*2-1;
-  const src = ctx.createBufferSource(); src.buffer = buf;
-  const bp = ctx.createBiquadFilter(); bp.type='bandpass'; bp.Q.value=0.6;
-  // Sweep centre freq from 120→2800Hz (engine spool-up)
-  bp.frequency.setValueAtTime(120, now);
-  bp.frequency.exponentialRampToValueAtTime(2800, now+dur);
-  const g = ctx.createGain();
-  src.connect(bp); bp.connect(g); g.connect(ctx.destination);
-  g.gain.setValueAtTime(0, now);
-  g.gain.linearRampToValueAtTime(0.18*VOL.sfx, now+dur*0.3);
-  g.gain.linearRampToValueAtTime(0.28*VOL.sfx, now+dur*0.85);
-  g.gain.linearRampToValueAtTime(0.05*VOL.sfx, now+dur);
-  src.start(now); src.stop(now+dur+0.05);
-  // Layer 2: low-frequency rumble (compressor)
-  const o = ctx.createOscillator(); const g2 = ctx.createGain();
-  o.connect(g2); g2.connect(ctx.destination);
-  o.type='sawtooth';
-  o.frequency.setValueAtTime(40, now);
-  o.frequency.exponentialRampToValueAtTime(180, now+dur);
-  g2.gain.setValueAtTime(0, now);
-  g2.gain.linearRampToValueAtTime(0.12*VOL.sfx, now+dur*0.2);
-  g2.gain.linearRampToValueAtTime(0.04*VOL.sfx, now+dur);
-  o.start(now); o.stop(now+dur+0.05);
-  // Layer 3: ignition crack at start
-  const ibuf = ctx.createBuffer(1, sr*0.08, sr);
-  const id = ibuf.getChannelData(0);
-  for(let i=0;i<id.length;i++) id[i]=(Math.random()*2-1)*Math.exp(-i/(sr*0.015));
-  const isrc = ctx.createBufferSource(); isrc.buffer=ibuf;
-  const ihp = ctx.createBiquadFilter(); ihp.type='highpass'; ihp.frequency.value=800;
-  const ig = ctx.createGain();
-  isrc.connect(ihp); ihp.connect(ig); ig.connect(ctx.destination);
-  ig.gain.setValueAtTime(0.4*VOL.sfx, now);
-  ig.gain.exponentialRampToValueAtTime(0.001, now+0.08);
-  isrc.start(now); isrc.stop(now+0.09);
+
+  // 1. Key insert click (sharp metallic tap at t=0)
+  const clickBuf = ctx.createBuffer(1, sr * 0.05, sr);
+  const cd = clickBuf.getChannelData(0);
+  for (let i = 0; i < cd.length; i++)
+    cd[i] = (Math.random()*2-1) * Math.exp(-i/(sr*0.005));
+  const clickSrc = ctx.createBufferSource(); clickSrc.buffer = clickBuf;
+  const clickFilt = ctx.createBiquadFilter(); clickFilt.type='bandpass'; clickFilt.frequency.value=2800; clickFilt.Q.value=1.5;
+  const clickG = ctx.createGain();
+  clickSrc.connect(clickFilt); clickFilt.connect(clickG); clickG.connect(ctx.destination);
+  clickG.gain.setValueAtTime(0.6 * VOL.sfx, now);
+  clickG.gain.exponentialRampToValueAtTime(0.001, now + 0.04);
+  clickSrc.start(now); clickSrc.stop(now + 0.05);
+
+  // 2. Key turning — 3 soft mechanical clicks (tumbler detents)
+  [0.08, 0.17, 0.28].forEach(t => {
+    const b = ctx.createBuffer(1, sr*0.04, sr);
+    const d = b.getChannelData(0);
+    for (let i=0; i<d.length; i++) d[i]=(Math.random()*2-1)*Math.exp(-i/(sr*0.006));
+    const s = ctx.createBufferSource(); s.buffer=b;
+    const f = ctx.createBiquadFilter(); f.type='bandpass'; f.frequency.value=1400; f.Q.value=2;
+    const g = ctx.createGain();
+    s.connect(f); f.connect(g); g.connect(ctx.destination);
+    g.gain.setValueAtTime(0.3*VOL.sfx, now+t);
+    g.gain.exponentialRampToValueAtTime(0.001, now+t+0.035);
+    s.start(now+t); s.stop(now+t+0.04);
+  });
+
+  // 3. Power-on hum — electrical drone rising from silence (starts at ~0.3s)
+  const hum = ctx.createOscillator(); const humG = ctx.createGain();
+  hum.connect(humG); humG.connect(ctx.destination);
+  hum.type = 'sawtooth';
+  hum.frequency.setValueAtTime(55, now + 0.32);
+  hum.frequency.linearRampToValueAtTime(60, now + 0.7);
+  humG.gain.setValueAtTime(0, now + 0.32);
+  humG.gain.linearRampToValueAtTime(0.14 * VOL.sfx, now + 0.55);
+  humG.gain.setValueAtTime(0.14 * VOL.sfx, now + 0.62);
+  humG.gain.linearRampToValueAtTime(0, now + 0.72);
+  hum.start(now + 0.32); hum.stop(now + 0.73);
+
+  // 4. Systems-online beep — short confirmation tone
+  const beep = ctx.createOscillator(); const beepG = ctx.createGain();
+  beep.connect(beepG); beepG.connect(ctx.destination);
+  beep.type = 'sine'; beep.frequency.value = 880;
+  beepG.gain.setValueAtTime(0, now + 0.6);
+  beepG.gain.linearRampToValueAtTime(0.12 * VOL.sfx, now + 0.62);
+  beepG.gain.exponentialRampToValueAtTime(0.001, now + 0.75);
+  beep.start(now + 0.6); beep.stop(now + 0.76);
 }
 
-// Mechanical safe-dial click — only fires when finger moves
-let lastDragAngle = null;
+// ── Switch toggle: heavy electrical toggle ──
+function playSwitchSound(isOn) {
+  if (!uiSfxOn || MUTED.sfx) return;
+  const ctx = getCtx(); const now = ctx.currentTime; const sr = ctx.sampleRate;
+  // Mechanical toggle thud
+  const buf = ctx.createBuffer(1, sr * 0.07, sr);
+  const d = buf.getChannelData(0);
+  for (let i = 0; i < d.length; i++)
+    d[i] = (Math.random()*2-1) * Math.exp(-i/(sr*0.012));
+  const src = ctx.createBufferSource(); src.buffer = buf;
+  const bp = ctx.createBiquadFilter();
+  bp.type = 'bandpass';
+  bp.frequency.value = isOn ? 420 : 280; // higher pitch for ON
+  bp.Q.value = 1.5;
+  const g = ctx.createGain();
+  src.connect(bp); bp.connect(g); g.connect(ctx.destination);
+  g.gain.setValueAtTime(0.55 * VOL.sfx, now);
+  g.gain.exponentialRampToValueAtTime(0.001, now + 0.06);
+  src.start(now); src.stop(now + 0.07);
+  // Electrical arc crackle on ON
+  if (isOn) {
+    const b2 = ctx.createBuffer(1, sr * 0.04, sr);
+    const d2 = b2.getChannelData(0);
+    for (let i = 0; i < d2.length; i++)
+      d2[i] = (Math.random()*2-1) * Math.exp(-i/(sr*0.004)) * (i < sr*0.01 ? 1 : 0);
+    const s2 = ctx.createBufferSource(); s2.buffer = b2;
+    const hp = ctx.createBiquadFilter(); hp.type='highpass'; hp.frequency.value=3000;
+    const g2 = ctx.createGain();
+    s2.connect(hp); hp.connect(g2); g2.connect(ctx.destination);
+    g2.gain.setValueAtTime(0.3 * VOL.sfx, now + 0.01);
+    s2.start(now + 0.01); s2.stop(now + 0.05);
+  }
+}
+
+// ── Mark done: satisfying check ──
+function playDoneSound() {
+  if (!uiSfxOn || MUTED.sfx) return;
+  const ctx = getCtx(); const now = ctx.currentTime;
+  // Two-tone rising click — like a physical checkbox
+  [0, 0.08].forEach((offset, i) => {
+    const o = ctx.createOscillator(), g = ctx.createGain();
+    o.connect(g); g.connect(ctx.destination);
+    o.type = 'sine';
+    o.frequency.value = i === 0 ? 800 : 1200;
+    g.gain.setValueAtTime(0, now + offset);
+    g.gain.linearRampToValueAtTime(0.12 * VOL.sfx, now + offset + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.001, now + offset + 0.1);
+    o.start(now + offset); o.stop(now + offset + 0.12);
+  });
+}
+
+// ── Keyboard typing: mechanical key press ──
+function playKeySound() {
+  if (!uiSfxOn || MUTED.sfx) return;
+  const ctx = getCtx(); const now = ctx.currentTime; const sr = ctx.sampleRate;
+  const buf = ctx.createBuffer(1, sr * 0.05, sr);
+  const d = buf.getChannelData(0);
+  for (let i = 0; i < d.length; i++)
+    d[i] = (Math.random()*2-1) * Math.exp(-i/(sr*0.006));
+  const src = ctx.createBufferSource(); src.buffer = buf;
+  const bp = ctx.createBiquadFilter(); bp.type='bandpass';
+  bp.frequency.value = 1800 + Math.random()*400; // slight random pitch variation
+  bp.Q.value = 1.2;
+  const g = ctx.createGain();
+  src.connect(bp); bp.connect(g); g.connect(ctx.destination);
+  g.gain.setValueAtTime(0.22 * VOL.sfx, now);
+  g.gain.exponentialRampToValueAtTime(0.001, now + 0.045);
+  src.start(now); src.stop(now + 0.05);
+}
+
+// ── Schedule confirm: mission briefing accepted ──
+function playConfirmSound() {
+  if (!uiSfxOn || MUTED.sfx) return;
+  const ctx = getCtx(); const now = ctx.currentTime;
+  // Two ascending tones — like a comm system accepting input
+  [[0, 660], [0.12, 880], [0.24, 1100]].forEach(([offset, freq]) => {
+    const o = ctx.createOscillator(), g = ctx.createGain();
+    o.connect(g); g.connect(ctx.destination);
+    o.type = 'square'; o.frequency.value = freq;
+    g.gain.setValueAtTime(0, now + offset);
+    g.gain.linearRampToValueAtTime(0.08 * VOL.sfx, now + offset + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.001, now + offset + 0.1);
+    o.start(now + offset); o.stop(now + offset + 0.11);
+  });
+}
 const LOCK_STEP_DEG = 6;
 
 function playLockTick() {
-  if (!uiSfxOn) return;
+  if (!uiSfxOn || MUTED.sfx) return;
   const ctx = getCtx(); const now = ctx.currentTime;
   // Layered: sharp transient + short resonance
   const buf = ctx.createBuffer(1, ctx.sampleRate * 0.06, ctx.sampleRate);
@@ -1072,7 +1179,8 @@ function getCtx() {
      convolver to simulate metal hull resonance
    ══════════════════════════════════════════ */
 function playSonarPing() {
-  syncRadarToSonar(); // reset radar to 12 o'clock on each ping
+  syncRadarToSonar();
+  if (MUTED.sonar) return;
   const ctx = getCtx();
   const now = ctx.currentTime;
 
@@ -1150,7 +1258,7 @@ let musicAudio = null;
 
 /* ── ALERT SOUNDS ── */
 function playAlert(type) {
-  if (!alertsOn) return;
+  if (!alertsOn || MUTED.alerts) return;
   const ctx = getCtx();
   const now = ctx.currentTime;
   const v = VOL.alerts;
@@ -1209,7 +1317,7 @@ function playAlert(type) {
 }
 
 function playCountdownBeep(secLeft) {
-  if (!alertsOn) return;
+  if (!alertsOn || MUTED.alerts) return;
   const ctx = getCtx(); const now = ctx.currentTime;
   const o = ctx.createOscillator(), g = ctx.createGain();
   o.connect(g); g.connect(ctx.destination);
@@ -1224,6 +1332,7 @@ function playCountdownBeep(secLeft) {
 function flipSwitch(id, callback) {
   const unit = document.getElementById(id);
   unit.classList.toggle('on');
+  playSwitchSound(unit.classList.contains('on'));
   callback();
 }
 
@@ -1233,6 +1342,7 @@ function setSwitchOn(id, on) {
 }
 
 function flipMusicLoad() {
+  playSwitchSound(true);
   document.getElementById('musicFileInput').click();
 }
 
@@ -1363,7 +1473,8 @@ function getTimerColor() {
 // 0 min = 12 o'clock (-PI/2), clockwise positive
 // So minute m → angle = -PI/2 + (m/60)*2PI
 function minToAngle(m) {
-  return -Math.PI / 2 + (m / 60) * Math.PI * 2;
+  // CCW from 12 o'clock — mirrors the original CW direction
+  return -Math.PI / 2 - (m / 60) * Math.PI * 2;
 }
 
 // ── Radar sweep — synced to sonar ──
@@ -1440,7 +1551,9 @@ function drawAll() {
       ctx2.fillStyle = 'rgba(247,127,0,0.5)';
       ctx2.font = '7px "Share Tech Mono",monospace';
       ctx2.textAlign = 'center'; ctx2.textBaseline = 'middle';
-      ctx2.fillText(i === 0 ? '60' : String(i), CX+nr*Math.cos(a), CY+nr*Math.sin(a));
+      // Labels go anticlockwise: at CW position i, show (60-i) so 15→45, 30→30, 45→15
+      const lbl = i === 0 ? '60' : String(60 - i);
+      ctx2.fillText(lbl, CX+nr*Math.cos(a), CY+nr*Math.sin(a));
     }
   }
 
@@ -1456,25 +1569,20 @@ function drawAll() {
   const col = getTimerColor();
   const remMins = rem / 60;
   const setMins = totalSec / 60;
-
-  // Use remMins always (shows fill animation and current time correctly)
-  // When idle with no objective, show full circle at set time
   const fillMins = (running || rem < totalSec) ? remMins : setMins;
-  const fillAngle = minToAngle(fillMins);
+  const fillAngle = minToAngle(fillMins); // CCW angle for remMins
 
   if (fillMins > 0) {
-    // Draw filled pie from 12 o'clock CW to fillAngle
-    // This is the Pac-Man body = remaining time
+    // Draw CW arc from fillAngle back to 12 o'clock = remaining slice, now on left side
     ctx2.beginPath();
     ctx2.moveTo(CX, CY);
-    ctx2.arc(CX, CY, R - 3, -Math.PI/2, fillAngle, false); // CW
+    ctx2.arc(CX, CY, R - 3, fillAngle, -Math.PI/2, false); // CW from CCW-angle to 12
     ctx2.closePath();
     ctx2.fillStyle = col + '30';
     ctx2.fill();
 
-    // Bright arc border along the outer edge of remaining portion
     ctx2.beginPath();
-    ctx2.arc(CX, CY, R - 3, -Math.PI/2, fillAngle, false);
+    ctx2.arc(CX, CY, R - 3, fillAngle, -Math.PI/2, false);
     ctx2.strokeStyle = col;
     ctx2.lineWidth = 3;
     ctx2.shadowColor = col;
@@ -1482,21 +1590,17 @@ function drawAll() {
     ctx2.stroke();
     ctx2.shadowBlur = 0;
 
-    // Line from center to 12 o'clock (start edge)
+    // Line to 12 o'clock (fixed trailing edge)
     ctx2.beginPath();
     ctx2.moveTo(CX, CY);
     ctx2.lineTo(CX, CY - (R-3));
-    ctx2.strokeStyle = col;
-    ctx2.lineWidth = 1.5;
-    ctx2.stroke();
+    ctx2.strokeStyle = col; ctx2.lineWidth = 1.5; ctx2.stroke();
 
-    // Line from center to rem mark (the "mouth" leading edge)
+    // Line to fillAngle (leading edge — moves CW toward 12 as rem drops)
     ctx2.beginPath();
     ctx2.moveTo(CX, CY);
     ctx2.lineTo(CX + (R-3)*Math.cos(fillAngle), CY + (R-3)*Math.sin(fillAngle));
-    ctx2.strokeStyle = col;
-    ctx2.lineWidth = 1.5;
-    ctx2.stroke();
+    ctx2.strokeStyle = col; ctx2.lineWidth = 1.5; ctx2.stroke();
   }
 
   // ── RADAR SWEEP ──
@@ -1557,8 +1661,10 @@ function angleToMins(angle) {
   let a = angle + Math.PI/2;
   if (a < 0) a += Math.PI*2;
   if (a >= Math.PI*2) a -= Math.PI*2;
-  const m = Math.round((a/(Math.PI*2))*60);
-  return Math.max(1, Math.min(60, m===0?60:m));
+  // Invert: drag to 3 o'clock (a=PI/2 = 0.25 of circle) → 45min, not 15min
+  const mRaw = Math.round((a/(Math.PI*2))*60);
+  const mInv = mRaw === 0 ? 60 : (60 - mRaw + 60) % 60 || 60;
+  return Math.max(1, Math.min(60, mInv));
 }
 // Timer is "locked" when running OR when paused mid-session
 function timerLocked() { return running || (rem > 0 && rem < totalSec); }
@@ -1612,7 +1718,9 @@ let wakeLock = null;
 let timerFocusActive = false;
 let ovCanvas = null, ovCtx = null;
 let ovAnimId = null;
-let lastTapTime = 0;
+let lastOverlayTapTime = 0;   // for overlay single-tap exit
+let lastCanvasTapTime = 0;    // for main canvas double-tap enter
+let fsExitCooldown = false;   // prevent immediate re-entry after exit
 
 async function requestWakeLock() {
   try {
@@ -1635,16 +1743,19 @@ function enterTimerFullscreen() {
   const ov = document.getElementById('timerOverlay');
   ov.style.display = 'flex';
   requestWakeLock();
+  // Disable timer control buttons so they can't be accidentally pressed
+  ['btnGo','btnHld','btnRst'].forEach(id => {
+    const b = document.getElementById(id);
+    if (b) { b.dataset.wasDisabled = b.disabled; b.disabled = true; b.style.pointerEvents = 'none'; }
+  });
+  document.querySelectorAll('.btn-rst').forEach(b => { b.disabled=true; b.style.pointerEvents='none'; });
 
-  // Request native fullscreen to hide OS navigation bar
   const el = document.documentElement;
   if (el.requestFullscreen) el.requestFullscreen().catch(()=>{});
   else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
 
-  // Size the overlay canvas to fill the screen (square, as large as fits)
   ovCanvas = document.getElementById('ovCanvas');
   ovCtx = ovCanvas.getContext('2d');
-  // Resize after a short delay to get correct post-fullscreen dimensions
   setTimeout(() => {
     const size = Math.min(window.innerWidth, window.innerHeight) * 0.82;
     ovCanvas.width = size; ovCanvas.height = size;
@@ -1653,13 +1764,8 @@ function enterTimerFullscreen() {
 
   ovCanvas.ontouchend = ovCanvas.onclick = (e) => {
     e.stopPropagation();
-    const now = Date.now();
-    if (now - lastTapTime < 380) {
-      // double tap — ignore (already in overlay)
-    } else {
-      exitTimerFullscreen();
-    }
-    lastTapTime = now;
+    e.preventDefault();
+    exitTimerFullscreen();
   };
 
   drawOverlay();
@@ -1668,10 +1774,16 @@ function enterTimerFullscreen() {
 function exitTimerFullscreen() {
   if (!timerFocusActive) return;
   timerFocusActive = false;
+  fsExitCooldown = true;
+  setTimeout(() => { fsExitCooldown = false; }, 600); // 600ms cooldown before re-entry allowed
   document.getElementById('timerOverlay').style.display = 'none';
   if (ovAnimId) { cancelAnimationFrame(ovAnimId); ovAnimId = null; }
   releaseWakeLock();
-  // Exit native fullscreen
+  ['btnGo','btnHld'].forEach(id => {
+    const b = document.getElementById(id);
+    if (b) { b.disabled = false; b.style.pointerEvents = ''; }
+  });
+  document.querySelectorAll('.btn-rst').forEach(b => { b.disabled=false; b.style.pointerEvents=''; });
   if (document.fullscreenElement || document.webkitFullscreenElement) {
     if (document.exitFullscreen) document.exitFullscreen().catch(()=>{});
     else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
@@ -1712,23 +1824,25 @@ function drawOverlay() {
     c.strokeStyle = 'rgba(255,255,255,0.06)'; c.lineWidth = 1; c.stroke();
   });
 
-  // Pac-Man fill arc
-  const remMins = rem/60, setMins = totalSec/60;
-  const fillMins = (running || rem < totalSec) ? remMins : setMins;
-  if (fillMins > 0) {
-    const fillAngle = -Math.PI/2 + (fillMins/60)*Math.PI*2;
+  // Pac-Man fill arc — mirrored CW eating
+  const remMins2 = rem/60, setMins2 = totalSec/60;
+  const fillMins2 = (running || rem < totalSec) ? remMins2 : setMins2;
+  const fillAngle2 = -Math.PI/2 - (fillMins2/60)*Math.PI*2; // CCW angle
+
+  if (fillMins2 > 0) {
+    const rr2 = r - size*0.015;
     c.beginPath(); c.moveTo(cx,cy);
-    c.arc(cx, cy, r-size*0.015, -Math.PI/2, fillAngle, false);
+    c.arc(cx, cy, rr2, fillAngle2, -Math.PI/2, false); // CW from CCW-angle to 12
     c.closePath(); c.fillStyle = col+'28'; c.fill();
-    c.beginPath(); c.arc(cx, cy, r-size*0.015, -Math.PI/2, fillAngle, false);
+    c.beginPath(); c.arc(cx, cy, rr2, fillAngle2, -Math.PI/2, false);
     c.strokeStyle = col; c.lineWidth = size*0.018;
     c.shadowColor = col; c.shadowBlur = size*0.04; c.stroke(); c.shadowBlur = 0;
-    // Leading edge line
-    c.beginPath(); c.moveTo(cx,cy);
-    c.lineTo(cx+(r-size*0.015)*Math.cos(fillAngle), cy+(r-size*0.015)*Math.sin(fillAngle));
+    // Fixed trailing edge at 12 o'clock
+    c.beginPath(); c.moveTo(cx,cy); c.lineTo(cx, cy-rr2);
     c.strokeStyle = col; c.lineWidth = size*0.006; c.stroke();
-    // 12 o'clock line
-    c.beginPath(); c.moveTo(cx,cy); c.lineTo(cx, cy-(r-size*0.015));
+    // Leading edge at fillAngle2
+    c.beginPath(); c.moveTo(cx,cy);
+    c.lineTo(cx+rr2*Math.cos(fillAngle2), cy+rr2*Math.sin(fillAngle2));
     c.strokeStyle = col; c.lineWidth = size*0.006; c.stroke();
   }
 
@@ -1765,14 +1879,12 @@ function drawOverlay() {
   ovAnimId = requestAnimationFrame(drawOverlay);
 }
 
-// Also re-enter if user double-taps the main canvas while running
+// Double-tap on main canvas while running → re-enter overlay
 canvas.addEventListener('click', (e) => {
-  if (!running) return;
+  if (!running || timerFocusActive || fsExitCooldown) return;
   const now = Date.now();
-  if (now - lastTapTime < 380) {
-    enterTimerFullscreen(); // double-tap main canvas → re-enter
-  }
-  lastTapTime = now;
+  if (now - lastCanvasTapTime < 380) enterTimerFullscreen();
+  lastCanvasTapTime = now;
 });
 
 function startTimer() {
@@ -1925,6 +2037,7 @@ let tasks = loadTasks();
 function addTask() {
   const inp = document.getElementById('tInp'), txt = inp.value.trim();
   if (!txt) return;
+  playConfirmSound();
   // If in a specific level tab, use that level's color; otherwise use selCol
   let col;
   if (activeTab > 0) {
@@ -2111,6 +2224,7 @@ function esc(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>
 let activeTab = 0; // 0 = ALL, 1-5 = level
 
 function setTab(idx) {
+  playUiClick();
   activeTab = idx;
   // Sync selCol and swatch highlight to match tab
   if (idx > 0) {
@@ -2482,6 +2596,7 @@ function confirmSchedule() {
   const time = document.getElementById('schedTime').value;
   const dur  = schedDurVal > 0 ? schedDurVal : 45;
   if (!date) { showToast('SELECT A DATE','warn'); return; }
+  playConfirmSound();
   calTasks.push({ id:Date.now(), taskId:schedTargetTaskId, name:task.text, color:task.color,
     date, time, dur, recur:schedRecur, sessions:[], done:false });
   saveCalTasks();
@@ -2543,6 +2658,7 @@ function confirmEditSchedule() {
   const date = document.getElementById('editSchedDate').value;
   const time = document.getElementById('editSchedTime').value;
   if (!date) { showToast('SELECT A DATE','warn'); return; }
+  playConfirmSound();
   // For recurring: update all entries with same taskId + recur pattern
   if (c.recur !== 'once') {
     calTasks.filter(x => x.taskId === c.taskId && x.recur === c.recur).forEach(x => {
@@ -2643,6 +2759,8 @@ function togCalTaskDate(calId, dateStr) {
     c.doneDates[dateStr] = !c.doneDates[dateStr];
     if (!c.doneDates[dateStr]) delete c.doneDates[dateStr];
   }
+  // Play sound: done = satisfying check, undone = click
+  if (isCalEntryDone(c, dateStr)) playDoneSound(); else playUiClick();
   saveCalTasks(); renderCal(); renderTasks();
 }
 
