@@ -606,7 +606,7 @@ if ('serviceWorker' in navigator) {
 <header>
   <div>
     <div class="logo-main">FOCUS<span>OPS</span></div>
-    <div class="logo-sub">MISSION CONTROL // v1.7</div>
+    <div class="logo-sub">MISSION CONTROL // v1.8</div>
   </div>
   <div class="header-right">
     <div class="status-dot"><span class="dot"></span> SYSTEM ONLINE &nbsp;|&nbsp; <span id="clk">--:--:--</span></div>
@@ -894,15 +894,28 @@ let musicEnabled = true;
 let uiSfxOn = true;
 
 // ── Volume levels (0.0–1.0) ──
-const VOL = { music: 0.5, sfx: 0.7, sonar: 0.6, alerts: 0.8 };
-const MUTED = { music: false, sfx: false, sonar: false, alerts: false };
+// Volume levels — load from localStorage or use defaults
+const VOL_DEFAULT = { music: 0.5, sfx: 0.7, sonar: 0.6, alerts: 0.8 };
+const MUTED_DEFAULT = { music: false, sfx: false, sonar: false, alerts: false };
+let VOL, MUTED;
+try {
+  const sv = localStorage.getItem('focusops_vol');
+  const sm = localStorage.getItem('focusops_muted');
+  VOL   = sv ? JSON.parse(sv) : {...VOL_DEFAULT};
+  MUTED = sm ? JSON.parse(sm) : {...MUTED_DEFAULT};
+} catch(e) {
+  VOL   = {...VOL_DEFAULT};
+  MUTED = {...MUTED_DEFAULT};
+}
+function saveVolSettings() {
+  try { localStorage.setItem('focusops_vol', JSON.stringify(VOL)); localStorage.setItem('focusops_muted', JSON.stringify(MUTED)); } catch(e) {}
+}
 
 function toggleMuteVol(key) {
   MUTED[key] = !MUTED[key];
-  if (key === 'music' && musicAudio) {
-    musicAudio.volume = MUTED.music ? 0 : VOL.music * 0.8;
-  }
-  openVolPanel(); // refresh panel UI
+  if (key === 'music' && musicAudio) musicAudio.volume = MUTED.music ? 0 : VOL.music * 0.8;
+  saveVolSettings();
+  openVolPanel();
 }
 
 function openVolPanel() {
@@ -935,7 +948,8 @@ function setVol(key, val) {
   VOL[key] = parseInt(val)/100;
   const lbl = document.getElementById('volLbl_'+key);
   if (lbl) lbl.textContent = val+'%';
-  if (key==='music' && musicAudio) musicAudio.volume = VOL.music * 0.5;
+  if (key==='music' && musicAudio) musicAudio.volume = MUTED.music ? 0 : VOL.music * 0.8;
+  saveVolSettings();
 }
 
 // ── UI Click: hard metallic relay click ──
@@ -992,59 +1006,59 @@ function playUiSwipe() {
   src2.start(now+dur*0.85); src2.stop(now+dur+0.03);
 }
 
-// ── Fill sound: key turning in ignition ──
+// ── Fill sound: pressurized gas filling + gun loading click-clack ──
 function playFillSound(durationMs) {
   if (!uiSfxOn || MUTED.sfx) return;
   const ctx = getCtx(); const now = ctx.currentTime;
   const sr = ctx.sampleRate;
+  const dur = durationMs / 1000;
 
-  // 1. Key insert click (sharp metallic tap at t=0)
-  const clickBuf = ctx.createBuffer(1, sr * 0.05, sr);
-  const cd = clickBuf.getChannelData(0);
-  for (let i = 0; i < cd.length; i++)
-    cd[i] = (Math.random()*2-1) * Math.exp(-i/(sr*0.005));
-  const clickSrc = ctx.createBufferSource(); clickSrc.buffer = clickBuf;
-  const clickFilt = ctx.createBiquadFilter(); clickFilt.type='bandpass'; clickFilt.frequency.value=2800; clickFilt.Q.value=1.5;
-  const clickG = ctx.createGain();
-  clickSrc.connect(clickFilt); clickFilt.connect(clickG); clickG.connect(ctx.destination);
-  clickG.gain.setValueAtTime(0.6 * VOL.sfx, now);
-  clickG.gain.exponentialRampToValueAtTime(0.001, now + 0.04);
-  clickSrc.start(now); clickSrc.stop(now + 0.05);
+  // Gas hiss — filtered white noise, rises then cuts off sharply
+  const nBuf = ctx.createBuffer(1, sr * dur, sr);
+  const nd = nBuf.getChannelData(0);
+  for (let i = 0; i < nd.length; i++) nd[i] = Math.random()*2-1;
+  const nSrc = ctx.createBufferSource(); nSrc.buffer = nBuf;
+  const bp = ctx.createBiquadFilter(); bp.type='bandpass'; bp.frequency.value=3800; bp.Q.value=0.4;
+  const hp = ctx.createBiquadFilter(); hp.type='highpass'; hp.frequency.value=2200;
+  const nG = ctx.createGain();
+  nSrc.connect(bp); bp.connect(hp); hp.connect(nG); nG.connect(ctx.destination);
+  // Slow build-up, steady hiss, sharp cut
+  nG.gain.setValueAtTime(0, now);
+  nG.gain.linearRampToValueAtTime(0.18 * VOL.sfx, now + dur * 0.25);
+  nG.gain.setValueAtTime(0.18 * VOL.sfx, now + dur * 0.88);
+  nG.gain.linearRampToValueAtTime(0, now + dur * 0.95);
+  nSrc.start(now); nSrc.stop(now + dur);
 
-  // 2. Key turning — 3 soft mechanical clicks (tumbler detents)
-  [0.08, 0.17, 0.28].forEach(t => {
-    const b = ctx.createBuffer(1, sr*0.04, sr);
+  // Low body resonance under the hiss (pressure chamber)
+  const resonBuf = ctx.createBuffer(1, sr * dur, sr);
+  const rd = resonBuf.getChannelData(0);
+  for (let i = 0; i < rd.length; i++) rd[i] = Math.random()*2-1;
+  const rSrc = ctx.createBufferSource(); rSrc.buffer = resonBuf;
+  const rbp = ctx.createBiquadFilter(); rbp.type='bandpass'; rbp.frequency.value=180; rbp.Q.value=3;
+  const rG = ctx.createGain();
+  rSrc.connect(rbp); rbp.connect(rG); rG.connect(ctx.destination);
+  rG.gain.setValueAtTime(0, now);
+  rG.gain.linearRampToValueAtTime(0.1 * VOL.sfx, now + dur * 0.3);
+  rG.gain.setValueAtTime(0.1 * VOL.sfx, now + dur * 0.85);
+  rG.gain.linearRampToValueAtTime(0, now + dur * 0.95);
+  rSrc.start(now); rSrc.stop(now + dur);
+
+  // Gun bolt — two hard metallic hits: slide back then slam forward
+  const t1 = now + dur * 0.92; // slide back
+  const t2 = now + dur * 0.97; // slam forward (the satisfying clack)
+  [[t1, 1800, 0.45], [t2, 1100, 0.7]].forEach(([t, freq, vol]) => {
+    const b = ctx.createBuffer(1, sr * 0.06, sr);
     const d = b.getChannelData(0);
-    for (let i=0; i<d.length; i++) d[i]=(Math.random()*2-1)*Math.exp(-i/(sr*0.006));
-    const s = ctx.createBufferSource(); s.buffer=b;
-    const f = ctx.createBiquadFilter(); f.type='bandpass'; f.frequency.value=1400; f.Q.value=2;
+    for (let i = 0; i < d.length; i++)
+      d[i] = (Math.random()*2-1) * Math.exp(-i/(sr*0.007));
+    const s = ctx.createBufferSource(); s.buffer = b;
+    const f = ctx.createBiquadFilter(); f.type='bandpass'; f.frequency.value=freq; f.Q.value=1.8;
     const g = ctx.createGain();
     s.connect(f); f.connect(g); g.connect(ctx.destination);
-    g.gain.setValueAtTime(0.3*VOL.sfx, now+t);
-    g.gain.exponentialRampToValueAtTime(0.001, now+t+0.035);
-    s.start(now+t); s.stop(now+t+0.04);
+    g.gain.setValueAtTime(vol * VOL.sfx, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.055);
+    s.start(t); s.stop(t + 0.06);
   });
-
-  // 3. Power-on hum — electrical drone rising from silence (starts at ~0.3s)
-  const hum = ctx.createOscillator(); const humG = ctx.createGain();
-  hum.connect(humG); humG.connect(ctx.destination);
-  hum.type = 'sawtooth';
-  hum.frequency.setValueAtTime(55, now + 0.32);
-  hum.frequency.linearRampToValueAtTime(60, now + 0.7);
-  humG.gain.setValueAtTime(0, now + 0.32);
-  humG.gain.linearRampToValueAtTime(0.14 * VOL.sfx, now + 0.55);
-  humG.gain.setValueAtTime(0.14 * VOL.sfx, now + 0.62);
-  humG.gain.linearRampToValueAtTime(0, now + 0.72);
-  hum.start(now + 0.32); hum.stop(now + 0.73);
-
-  // 4. Systems-online beep — short confirmation tone
-  const beep = ctx.createOscillator(); const beepG = ctx.createGain();
-  beep.connect(beepG); beepG.connect(ctx.destination);
-  beep.type = 'sine'; beep.frequency.value = 880;
-  beepG.gain.setValueAtTime(0, now + 0.6);
-  beepG.gain.linearRampToValueAtTime(0.12 * VOL.sfx, now + 0.62);
-  beepG.gain.exponentialRampToValueAtTime(0.001, now + 0.75);
-  beep.start(now + 0.6); beep.stop(now + 0.76);
 }
 
 // ── Switch toggle: heavy electrical toggle ──
